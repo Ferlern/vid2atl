@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "vid2atl"
+version = "0.1.0"
+description = "Converts videos to articles"
+authors = ["Ferlern <67915420+Ferlern@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+youtube-transcript-api = "^0.6.0"
+vidgear = "^0.3.0"
+opencv-python = "^4.7.0.72"
+yt-dlp = "^2023.3.4"
+python-dotenv = "^1.0.0"
+sseclient = "^0.0.27"
+fastapi = "^0.97.0"
+uvicorn = "^0.22.0"
+aiohttp = "^3.8.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

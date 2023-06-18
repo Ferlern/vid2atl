@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# vscode
+.vscode/
+
+# logs
+logs/
+
+# TODO
+TODO
+
+# Lint settings
+setup.cfg
+.idea
+data
+
+# env
+.env

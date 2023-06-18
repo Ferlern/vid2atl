@@ -31,4 +31,4 @@ async def create_article(
         lang=article_request.lang,
         session=session,
     )
-    return article.json()
+    return article.dict()

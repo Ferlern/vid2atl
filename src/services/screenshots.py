@@ -1,5 +1,8 @@
+from typing import Sequence
+
 import cv2
 from vidgear.gears import CamGear
+
 from src.logger import get_logger
 
 
@@ -8,7 +11,7 @@ logger = get_logger()
 
 def extract_frames(
     url: str,
-    screenshot_seconds: list[int],
+    screenshot_seconds: Sequence[int],
 ) -> list[bytes]:
     stream = CamGear(
         source=url,  # type: ignore

@@ -1,7 +1,7 @@
 from aiohttp import ClientSession
 
 
-class HttpClient:
+class _HttpClient:
     session: ClientSession
 
     def start(self):
@@ -14,4 +14,4 @@ class HttpClient:
         return self.session
 
 
-http_client = HttpClient()
+http_client = _HttpClient()

@@ -1,12 +1,17 @@
 from __future__ import annotations
 import asyncio
 import base64
-from typing import TYPE_CHECKING
+import json
+from datetime import timedelta
+from typing import TYPE_CHECKING, Iterable
+
 from fastapi.concurrency import run_in_threadpool
-from src.schemas import Article, ArticleTopic
+from pydantic.tools import parse_obj_as
+
+from src.schemas import Article, ArticleTopic, TranscriptEntry
 from src.logger import get_logger
+from .gpt import gpt_request
 from .translation import translate_text
-from .gpt import generate_article_text
 from .transcript import get_english_transcript
 from .screenshots import extract_frames
 
@@ -14,6 +19,15 @@ if TYPE_CHECKING:
     from aiohttp import ClientSession
 
 logger = get_logger()
+PROMPT = """
+Your task is to create an article from video subtitles.
+You will receive subtitles in the following format:
+hh:mm:ss - subtitles
+hh:mm:ss - subtitles
+...
+
+Article must have title. The article should be divided into {} subtopics with headings. Respond with JSON in the following format (Substitude text in [square brackets]):
+{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[retelling of what was said in third person]"}}, ...]}}"""  # noqa: E501
 
 
 async def generate_article(
@@ -26,10 +40,10 @@ async def generate_article(
     logger.info('gathering english transcript for %s', url)
     transcript = await get_english_transcript(url, session)
     logger.info('generating article text for %s', url)
-    article = await generate_article_text(transcript, number_of_paragraphs, session)
+    article = await _generate_article_text(transcript, number_of_paragraphs, session)
     screenshot_seconds = []
     for topic in article.topics:
-        mid_sec = (get_sec(topic.start) + get_sec(topic.end)) // 2
+        mid_sec = (_get_sec(topic.start) + _get_sec(topic.end)) // 2
         screenshot_seconds.append(int(mid_sec))
     logger.info('gathering frames and translating to %s for %s', lang, url)
     tasks = [run_in_threadpool(extract_frames, url, screenshot_seconds)]
@@ -50,7 +64,7 @@ async def translate_article(
 ) -> None:
     article.title, *_ = await asyncio.gather(
         translate_text(article.title, src='en', dest=lang, session=session),
-        *[translate_article_topic(
+        *[_translate_article_topic(
             topic,
             lang=lang,
             session=session
@@ -58,7 +72,27 @@ async def translate_article(
     )
 
 
-async def translate_article_topic(
+def _format_transcript(transcript_entries: Iterable[TranscriptEntry]) -> list[str]:
+    result = []
+    for entry in transcript_entries:
+        start = entry.start
+        text = entry.text
+        result.append(f'{timedelta(seconds=int(start))} - {text}')
+    return result
+
+
+async def _generate_article_text(
+    transcript_entries: Iterable[TranscriptEntry],
+    number_of_paragraphs: int,
+    session: ClientSession,
+) -> Article:
+    subtitles = _format_transcript(transcript_entries)
+    resp = await gpt_request(PROMPT.format(number_of_paragraphs), '\n'.join(subtitles), session)
+    article_dict = json.loads(resp)
+    return parse_obj_as(Article, article_dict)
+
+
+async def _translate_article_topic(
     topic: ArticleTopic,
     lang: str,
     session: ClientSession,
@@ -69,6 +103,6 @@ async def translate_article_topic(
     )
 
 
-def get_sec(time_str: str) -> int:
+def _get_sec(time_str: str) -> int:
     h, m, s = time_str.split(':')
     return int(h) * 3600 + int(m) * 60 + int(s)

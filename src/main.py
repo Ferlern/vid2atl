@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from logging.config import dictConfig
+
 from fastapi import FastAPI, Depends
 from aiohttp import ClientSession
-from logging.config import dictConfig
+
 from .schemas import ArticleRequest
 from .dependencies import http_client
 from .services.article import generate_article
@@ -12,12 +14,12 @@ dictConfig(LogConfig().dict())
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _lifespan(_: FastAPI):
     http_client.start()
     yield
     await http_client.stop()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=_lifespan)
 
 
 @app.post("/article/")

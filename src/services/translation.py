@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from typing import TYPE_CHECKING, NamedTuple, TypedDict
 
 if TYPE_CHECKING:
@@ -113,6 +114,7 @@ LANGUAGES = {
     'yo': 'Yoruba',
     'zu': 'Zulu',
 }
+CHUNK_DELIMITER = '(*)'
 
 
 class TranslateError(Exception):
@@ -134,7 +136,13 @@ class TranslateResult(NamedTuple):
     target_language: str
 
 
-async def translate(text: str, *, src: str = 'auto', dest: str = 'en', session: ClientSession) -> TranslateResult:
+async def translate(
+    text: str,
+    *,
+    src: str = 'auto',
+    dest: str = 'en',
+    session: ClientSession,
+) -> TranslateResult:
     # This was discovered by the people here:
     # https://github.com/ssut/py-googletrans/issues/268
     query = {
@@ -150,12 +158,14 @@ async def translate(text: str, *, src: str = 'auto', dest: str = 'en', session: 
     }
 
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36'
+        'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                       '(KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36')
     }
 
     target_language = LANGUAGES.get(dest, 'Unknown')
 
-    async with session.get('https://clients5.google.com/translate_a/single', params=query, headers=headers) as resp:
+    async with session.get(url='https://clients5.google.com/translate_a/single',
+                           params=query, headers=headers) as resp:
         if resp.status != 200:
             text = await resp.text()
             raise TranslateError(resp.status, text)
@@ -178,5 +188,51 @@ async def translate(text: str, *, src: str = 'auto', dest: str = 'en', session: 
         )
 
 
-async def translate_text(text: str, *, src: str = 'auto', dest: str = 'en', session: ClientSession) -> str:
+async def translate_list(
+    texts: list[str],
+    *,
+    src: str = 'auto',
+    dest: str = 'en',
+    session: ClientSession,
+) -> list[TranslateResult]:
+    to_translate = []
+    chunk = []
+    chunk_len = 0
+
+    for text in texts:
+        text_len = len(text)
+        if chunk_len + text_len > 3500:
+            to_translate.append(CHUNK_DELIMITER.join(chunk))
+            chunk = []
+            chunk_len = 0
+        chunk.append(text)
+        chunk_len += text_len
+    if chunk:
+        to_translate.append(CHUNK_DELIMITER.join(chunk))
+
+    translate_results = await asyncio.gather(
+        *[translate(chunk, src=src, dest=dest, session=session) for chunk in to_translate]
+    )
+    result = []
+    for chunk in translate_results:
+        for original, translated in zip(
+            chunk.original.split(CHUNK_DELIMITER),
+            chunk.translated.split(CHUNK_DELIMITER)
+        ):
+            result.append(TranslateResult(
+                original=original,
+                translated=translated,
+                source_language=chunk.source_language,
+                target_language=chunk.target_language,
+            ))
+    return result
+
+
+async def translate_text(
+    text: str,
+    *,
+    src: str = 'auto',
+    dest: str = 'en',
+    session: ClientSession
+) -> str:
     return (await translate(text, src=src, dest=dest, session=session)).translated

@@ -3,11 +3,13 @@ from typing import TYPE_CHECKING
 import re
 
 import youtube_transcript_api
+from youtube_transcript_api import _errors as youtube_transcript_errors
 from fastapi.concurrency import run_in_threadpool
 
 from src.schemas import TranscriptEntry
 from src.logger import get_logger
 from .translation import translate_list
+from .whisper import whisper_transcript
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -19,16 +21,11 @@ logger = get_logger()
 
 
 async def get_english_transcript(url: str, session: ClientSession) -> list[TranscriptEntry]:
-    transcript = await _get_best_for_translatate_transcript(url)
-    if transcript.language_code == 'en':
-        transcript_data = await run_in_threadpool(transcript.fetch)
-    elif 'en' in transcript.translation_languages:
-        transcript_data = await run_in_threadpool(transcript.translate('en').fetch)
-    else:
-        transcript_data = await run_in_threadpool(transcript.fetch)
-        await _translate_transcript_data(transcript_data, session=session)
-    logger.debug(transcript_data)
-    return [TranscriptEntry(**entry) for entry in transcript_data]
+    try:
+        return await _get_youtube_english_transcript(url, session)
+    except youtube_transcript_errors.TranscriptsDisabled:
+        logger.info('No transcripts for %s, use whisper fallback', url)
+        return await whisper_transcript(session, url)
 
 
 async def _translate_transcript_data(data: list[dict], session: ClientSession) -> None:
@@ -67,3 +64,18 @@ def _best_transcript_for_translatate_in_english(
 
 async def _get_best_for_translatate_transcript(url: str) -> youtube_transcript_api.Transcript:
     return _best_transcript_for_translatate_in_english(await _get_transcripts(url))
+
+
+async def _get_youtube_english_transcript(
+    url: str,
+    session: ClientSession,
+) -> list[TranscriptEntry]:
+    transcript = await _get_best_for_translatate_transcript(url)
+    if transcript.language_code == 'en':
+        transcript_data = await run_in_threadpool(transcript.fetch)
+    elif 'en' in transcript.translation_languages:
+        transcript_data = await run_in_threadpool(transcript.translate('en').fetch)
+    else:
+        transcript_data = await run_in_threadpool(transcript.fetch)
+        await _translate_transcript_data(transcript_data, session=session)
+    return [TranscriptEntry(**entry) for entry in transcript_data]

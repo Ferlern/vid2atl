@@ -8,9 +8,11 @@ from .schemas import ArticleRequest
 from .dependencies import http_client
 from .services.article import generate_article
 from .logger import LogConfig
+from .utils.pytube_hotfix import fix
 
 
 dictConfig(LogConfig().dict())
+fix()
 
 
 @asynccontextmanager

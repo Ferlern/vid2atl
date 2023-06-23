@@ -19,6 +19,17 @@ if TYPE_CHECKING:
     from aiohttp import ClientSession
 
 logger = get_logger()
+PROMPT_SINGLE = """
+Your task is to create an article from video subtitles.
+You will receive subtitles in the following format:
+hh:mm:ss - subtitles
+hh:mm:ss - subtitles
+...
+
+Article must have title. In placeholders for time, specify the start and end of subtitles
+Respond with JSON in the following format (Substitude text in [square brackets]):
+{"title": "[title]", "topics": [{"subtitle": "[same sa title]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Detailed retelling of what was said in third person]"}]}"""  # noqa: E501
+
 PROMPT = """
 Your task is to create an article from video subtitles.
 You will receive subtitles in the following format:
@@ -26,8 +37,11 @@ hh:mm:ss - subtitles
 hh:mm:ss - subtitles
 ...
 
-Article must have title. The article should be divided into {} subtopics with headings. Respond with JSON in the following format (Substitude text in [square brackets]):
-{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[retelling of what was said in third person]"}}, ...]}}"""  # noqa: E501
+Article must have title. The article should be divided into {} subtopics with headings.
+Try to make subtopics of the same size. If there are too many topics in the subtitles for the specified number of article subtopics, put several topics in one. For example "Arrays and Hash tables". If there are too few topics in subtitles, divide them into parts, for example "Arrays (intro)" and "Arrays (continued)"
+
+Respond with JSON in the following format (Substitude text in [square brackets]):
+{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Detailed retelling of what was said in third person]"}}, ...]}}"""  # noqa: E501
 
 
 async def generate_article(
@@ -87,7 +101,8 @@ async def _generate_article_text(
     session: ClientSession,
 ) -> Article:
     subtitles = _format_transcript(transcript_entries)
-    resp = await gpt_request(PROMPT.format(number_of_paragraphs), '\n'.join(subtitles), session)
+    prompt = PROMPT_SINGLE if number_of_paragraphs == 1 else PROMPT.format(number_of_paragraphs)
+    resp = await gpt_request(prompt, '\n'.join(subtitles), session)
     article_dict = json.loads(resp)
     return parse_obj_as(Article, article_dict)
 

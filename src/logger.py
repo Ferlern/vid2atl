@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class LogConfig(BaseModel):
     LOGGER_NAME: str = "vid2atl"
     LOG_FORMAT: str = "%(levelprefix)s | %(asctime)s | %(message)s"
-    LOG_LEVEL: str = "DEBUG" if __debug__ else "INFO"
+    LOG_LEVEL: str = "DEBUG"
 
     version = 1
     disable_existing_loggers = False

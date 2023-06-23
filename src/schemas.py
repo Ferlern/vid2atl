@@ -27,6 +27,7 @@ class ArticleRequest(BaseModel):
     person: PersonType = PersonType.FIRST
     aditional_prompt: str = ''
     lang: str = 'en'
+    force_whisper: bool = False
 
 
 class ArticleTopic(BaseModel):

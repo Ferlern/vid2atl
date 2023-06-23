@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from fastapi.concurrency import run_in_threadpool
 from pydantic.tools import parse_obj_as
 
-from src.schemas import Article, ArticleTopic, TranscriptEntry, PersonType
+from src.schemas import Article, ArticleTopic, TranscriptEntry, PersonType, ArticleRequest
 from src.logger import get_logger
 from .gpt import gpt_request
 from .translation import translate_text
@@ -34,33 +34,30 @@ Respond with valid JSON in the following format (Substitude text in [square brac
 
 
 async def generate_article(
-    url: str,
-    number_of_paragraphs: int,
-    lang: str,
-    person: PersonType,
-    aditional_prompt: str,
+    request: ArticleRequest,
     session: ClientSession
 ) -> Article:
+    url = request.url
     logger.info('generating article for %s', url)
     logger.info('gathering english transcript for %s', url)
-    transcript = await get_english_transcript(url, session)
+    transcript = await get_english_transcript(url, request.force_whisper, session)
     logger.debug('transcript for %s %s', url, transcript)
     logger.info('generating article text for %s', url)
     article = await _generate_article_text(
         transcript,
-        number_of_paragraphs,
-        person=person,
-        aditional_prompt=aditional_prompt,
+        request.number_of_paragraphs,
+        person=request.person,
+        aditional_prompt=request.aditional_prompt,
         session=session,
     )
     screenshot_seconds = []
     for topic in article.topics:
         mid_sec = (_get_sec(topic.start) + _get_sec(topic.end)) // 2
         screenshot_seconds.append(int(mid_sec))
-    logger.info('gathering frames and translating to %s for %s', lang, url)
+    logger.info('gathering frames and translating to %s for %s', request.lang, url)
     tasks = [run_in_threadpool(extract_frames, url, screenshot_seconds)]
-    if lang != 'en':
-        tasks.append(translate_article(article, session=session, lang=lang))  # type: ignore
+    if request.lang != 'en':
+        tasks.append(translate_article(article, session=session, lang=request.lang))  # type: ignore
     frames, *_ = await asyncio.gather(*tasks)
     logger.info('encoding images for %s', url)
     for topic, frame in zip(article.topics, frames):

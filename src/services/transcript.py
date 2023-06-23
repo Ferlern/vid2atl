@@ -20,7 +20,13 @@ _transcript_api = youtube_transcript_api.YouTubeTranscriptApi()
 logger = get_logger()
 
 
-async def get_english_transcript(url: str, session: ClientSession) -> list[TranscriptEntry]:
+async def get_english_transcript(
+    url: str,
+    force_whisper: bool,
+    session: ClientSession
+) -> list[TranscriptEntry]:
+    if force_whisper:
+        return await whisper_transcript(session, url)
     try:
         return await _get_youtube_english_transcript(url, session)
     except youtube_transcript_errors.TranscriptsDisabled:

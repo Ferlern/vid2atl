@@ -201,7 +201,7 @@ async def translate_list(
 
     for text in texts:
         text_len = len(text)
-        if chunk_len + text_len > 3500:
+        if chunk_len + text_len > 2500:
             to_translate.append(CHUNK_DELIMITER.join(chunk))
             chunk = []
             chunk_len = 0

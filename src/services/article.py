@@ -53,6 +53,7 @@ async def generate_article(
     logger.info('generating article for %s', url)
     logger.info('gathering english transcript for %s', url)
     transcript = await get_english_transcript(url, session)
+    logger.debug('transcript for %s %s', url, transcript)
     logger.info('generating article text for %s', url)
     article = await _generate_article_text(transcript, number_of_paragraphs, session)
     screenshot_seconds = []

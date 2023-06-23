@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import os
+import io
 import json
 
 from dotenv import load_dotenv
@@ -41,20 +42,31 @@ async def gpt_request(
         # "model": "claude-instant-100k",
         # "model": "gpt-3.5-turbo",
         "model": "gpt-3.5-turbo-16k",
+        # "model": "gpt-4",
         "temperature": 1,
         "presence_penalty": 0,
         "top_p": 1,
         "frequency_penalty": 0,
-        "stream": False,
+        "stream": True,
     }
     headers = {
         'Authorization': f'Bearer {TOKEN}',
         'Accept': 'text/event-stream',
     }
 
+    buffer = io.StringIO()
     async with session.post(PATH, headers=headers, json=payload) as response:
-        text = (await response.text()).lstrip('data:').rstrip('\n')
-    resp_json = json.loads(text)
-    content = resp_json['choices'][0]['message']['content']
+        async for event in response.content:
+            if event == b'\n' or not event:
+                continue
+            try:
+                resp_dict = json.loads(event.lstrip(b'data:').rstrip(b'\n'))
+            except json.JSONDecodeError:
+                logger.warning('Broken event from model: %s', event)
+                raise
+            if delta := resp_dict['choices'][0]['delta']:
+                content = delta['content']
+                buffer.write(content)
+    content = buffer.getvalue()
     logger.debug('Model response: %s', content)
     return content

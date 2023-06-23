@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from fastapi.concurrency import run_in_threadpool
 from pydantic.tools import parse_obj_as
 
-from src.schemas import Article, ArticleTopic, TranscriptEntry
+from src.schemas import Article, ArticleTopic, TranscriptEntry, PersonType
 from src.logger import get_logger
 from .gpt import gpt_request
 from .translation import translate_text
@@ -19,17 +19,6 @@ if TYPE_CHECKING:
     from aiohttp import ClientSession
 
 logger = get_logger()
-PROMPT_SINGLE = """
-Your task is to create an article from video subtitles.
-You will receive subtitles in the following format:
-hh:mm:ss - subtitles
-hh:mm:ss - subtitles
-...
-
-Article must have title. In placeholders for time, specify the start and end of subtitles
-Respond with JSON in the following format (Substitude text in [square brackets]):
-{"title": "[title]", "topics": [{"subtitle": "[same sa title]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Describe in detail what was said in this period of time]"}]}"""  # noqa: E501
-
 PROMPT = """
 Your task is to create an article from video subtitles.
 You will receive subtitles in the following format:
@@ -37,17 +26,19 @@ hh:mm:ss - subtitles
 hh:mm:ss - subtitles
 ...
 
-Article must have title. The article should be divided into {} subtopics with headings.
+Article must have title. The article should be divided into {number_of_subtopics} subtopics with headings.
 Try to make subtopics of the same size. If there are too many topics in the subtitles for the specified number of article subtopics, put several topics in one. For example "Arrays and Hash tables". If there are too few topics in subtitles, divide them into parts, for example "Arrays (intro)" and "Arrays (continued)"
-
-Respond with JSON in the following format (Substitude text in [square brackets]):
-{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Describe in detail what was said in this period of time]"}}, ...]}}"""  # noqa: E501
+{aditional_prompt}
+Respond with valid JSON in the following format (Substitude text in [square brackets]):
+{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Describe in detail what was said in {person} person]"}}, ...]}}"""  # noqa: E501
 
 
 async def generate_article(
     url: str,
     number_of_paragraphs: int,
     lang: str,
+    person: PersonType,
+    aditional_prompt: str,
     session: ClientSession
 ) -> Article:
     logger.info('generating article for %s', url)
@@ -55,7 +46,13 @@ async def generate_article(
     transcript = await get_english_transcript(url, session)
     logger.debug('transcript for %s %s', url, transcript)
     logger.info('generating article text for %s', url)
-    article = await _generate_article_text(transcript, number_of_paragraphs, session)
+    article = await _generate_article_text(
+        transcript,
+        number_of_paragraphs,
+        person=person,
+        aditional_prompt=aditional_prompt,
+        session=session,
+    )
     screenshot_seconds = []
     for topic in article.topics:
         mid_sec = (_get_sec(topic.start) + _get_sec(topic.end)) // 2
@@ -99,10 +96,16 @@ def _format_transcript(transcript_entries: Iterable[TranscriptEntry]) -> list[st
 async def _generate_article_text(
     transcript_entries: Iterable[TranscriptEntry],
     number_of_paragraphs: int,
+    person: PersonType,
+    aditional_prompt: str,
     session: ClientSession,
 ) -> Article:
     subtitles = _format_transcript(transcript_entries)
-    prompt = PROMPT_SINGLE if number_of_paragraphs == 1 else PROMPT.format(number_of_paragraphs)
+    prompt = PROMPT.format(
+        number_of_subtopics=number_of_paragraphs,
+        aditional_prompt=aditional_prompt,
+        person=person.value,
+    )
     resp = await gpt_request(prompt, '\n'.join(subtitles), session)
     article_dict = json.loads(resp)
     return parse_obj_as(Article, article_dict)

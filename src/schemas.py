@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -15,9 +16,16 @@ class TranscriptEntry:
     duration: float
 
 
+class PersonType(Enum):
+    FIRST = 'first'
+    THIRD = 'third'
+
+
 class ArticleRequest(BaseModel):
     number_of_paragraphs: int
     url: str = Field(regex=_YOUTUBE_REGEX)
+    person: PersonType = PersonType.FIRST
+    aditional_prompt: str = ''
     lang: str = 'en'
 
 

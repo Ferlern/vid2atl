@@ -33,6 +33,8 @@ async def create_article(
         url=article_request.url,
         number_of_paragraphs=article_request.number_of_paragraphs,
         lang=article_request.lang,
+        person=article_request.person,
+        aditional_prompt=article_request.aditional_prompt,
         session=session,
     )
     return article.dict()

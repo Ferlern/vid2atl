@@ -28,7 +28,7 @@ hh:mm:ss - subtitles
 
 Article must have title. In placeholders for time, specify the start and end of subtitles
 Respond with JSON in the following format (Substitude text in [square brackets]):
-{"title": "[title]", "topics": [{"subtitle": "[same sa title]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Detailed retelling of what was said in third person]"}]}"""  # noqa: E501
+{"title": "[title]", "topics": [{"subtitle": "[same sa title]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Describe in detail what was said in this period of time]"}]}"""  # noqa: E501
 
 PROMPT = """
 Your task is to create an article from video subtitles.
@@ -41,7 +41,7 @@ Article must have title. The article should be divided into {} subtopics with he
 Try to make subtopics of the same size. If there are too many topics in the subtitles for the specified number of article subtopics, put several topics in one. For example "Arrays and Hash tables". If there are too few topics in subtitles, divide them into parts, for example "Arrays (intro)" and "Arrays (continued)"
 
 Respond with JSON in the following format (Substitude text in [square brackets]):
-{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Detailed retelling of what was said in third person]"}}, ...]}}"""  # noqa: E501
+{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Describe in detail what was said in this period of time]"}}, ...]}}"""  # noqa: E501
 
 
 async def generate_article(

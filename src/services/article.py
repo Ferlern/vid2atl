@@ -29,17 +29,19 @@ Respond with valid JSON in the following format (Substitude text in [square brac
 "start" and "end" indicate the beginning and end of the discussion on this topic in video subtitles. Topics must cover all video subtitles and should last more than a minute."""  # noqa: E501
 
 TOPIC_PROMPT = """
-Your task is to combine video subtitles into whole sentences in first person without losing the meaning, combine multiple video subtitles into one sentence to achive this task. Each sentence should tell one thought. Also provide title for video subtitles. Answer in video subtitle language
+Your task is to combine video subtitles into separate whole sentences in first person without losing the meaning, combine multiple video subtitles into one sentence to achive this task. Each sentence should tell one thought. Also provide title which expresses the meaning of all sentences. Answer in video subtitle language
 You will receive subtitles in the following format:
 hh:mm:ss - subtitles
 hh:mm:ss - subtitles
 ...
 
-Respond in the following format (Substitude text in [square brackets]). Answer in video subtitle language:
+Answer in video subtitle language. Response template:
 [title]
-[hh:mm:ss - hh:mm:ss] [generated sentences]
-[hh:mm:ss - hh:mm:ss] [generated sentences]
+[hh:mm:ss - hh:mm:ss] [generated sentence]
+[hh:mm:ss - hh:mm:ss] [generated sentence]
 ...
+
+Substitude [hh:mm:ss - hh:mm:ss] with time, for example [00:01:22 - 00:01:35] and [generated sentences] with generated sentence. Do not provide text that does not fit the template.
 """  # noqa: E501
 
 

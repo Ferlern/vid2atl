@@ -16,15 +16,24 @@ class TranscriptEntry:
     duration: float
 
 
-class PersonType(Enum):
-    FIRST = 'first'
-    THIRD = 'third'
+class PostrocessorType(str, Enum):
+    BASE64 = 'base64'
+    IMGUR = 'imgur'
+
+
+class SelectorType(str, Enum):
+    UNIFORM = 'uniform'
 
 
 class ArticleRequest(BaseModel):
-    number_of_paragraphs: int = 0
+    number_of_paragraphs: int = Field(ge=2, default=3)
+    number_of_screenshots: int = Field(ge=1, default=3)
     url: str = Field(regex=_YOUTUBE_REGEX)
+    start: int = Field(ge=0, default=0)
+    end: int = Field(ge=0, default=0)
     force_whisper: bool = False
+    selector: SelectorType = SelectorType.UNIFORM
+    image_format: PostrocessorType = PostrocessorType.BASE64
 
 
 class ArticleTopic(BaseModel):

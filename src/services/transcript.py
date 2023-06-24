@@ -19,7 +19,7 @@ _transcript_api = youtube_transcript_api.YouTubeTranscriptApi()
 logger = get_logger()
 
 
-async def get_english_transcript(
+async def get_transcript(
     url: str,
     force_whisper: bool,
     session: ClientSession
@@ -27,10 +27,18 @@ async def get_english_transcript(
     if force_whisper:
         return await whisper_transcript(session, url)
     try:
-        return await _get_youtube_english_transcript(url, session)
+        return await _get_youtube_transcript(url, session)
     except youtube_transcript_errors.TranscriptsDisabled:
         logger.info('No transcripts for %s, use whisper fallback', url)
         return await whisper_transcript(session, url)
+
+
+def filter_transcript(
+    transcript: list[TranscriptEntry],
+    start: float,
+    end: float
+) -> list[TranscriptEntry]:
+    return [entry for entry in transcript if start < entry.start < end]
 
 
 def _youtuble_url_to_video_id(url: str) -> str:
@@ -44,11 +52,11 @@ async def _get_transcripts(url: str) -> youtube_transcript_api.TranscriptList:
     return await run_in_threadpool(_transcript_api.list_transcripts, video_id)
 
 
-def _best_transcript_for_translatate_in_english(
+def _best_transcript(
     transcripts: youtube_transcript_api.TranscriptList
 ) -> youtube_transcript_api.Transcript:
     best_langueges = [
-        'en', 'es', 'fr', 'de', 'it', 'pt', 'nl',
+        'ru', 'en', 'es', 'fr', 'de', 'it', 'pt', 'nl',
         'sv', 'da', 'no', 'fi', 'ru', 'ar', 'ja', 'ko', 'zh'
     ]
 
@@ -62,10 +70,10 @@ def _best_transcript_for_translatate_in_english(
 
 
 async def _get_best_for_translatate_transcript(url: str) -> youtube_transcript_api.Transcript:
-    return _best_transcript_for_translatate_in_english(await _get_transcripts(url))
+    return _best_transcript(await _get_transcripts(url))
 
 
-async def _get_youtube_english_transcript(
+async def _get_youtube_transcript(
     url: str,
     _: ClientSession,
 ) -> list[TranscriptEntry]:

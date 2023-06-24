@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-import base64
 from datetime import timedelta
 from typing import TYPE_CHECKING, Iterable, Sequence
 
@@ -10,8 +9,9 @@ from src.schemas import Article, ArticleTopic, TranscriptEntry, ArticleRequest
 from src.logger import get_logger
 from src.utils.time_ import get_sec
 from .gpt import gpt_json_request, gpt_request
-from .transcript import get_english_transcript
-from .screenshots import extract_frames
+from .transcript import get_transcript, filter_transcript
+from .screenshots.frame_selector import extract_frames
+from .screenshots.postprocessor import get_postrocessor
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -50,7 +50,9 @@ async def generate_article(
     url = request.url
     logger.info('generating article for %s', url)
     logger.info('gathering english transcript for %s', url)
-    transcript = await get_english_transcript(url, request.force_whisper, session)
+    transcript = await get_transcript(url, request.force_whisper, session)
+    if request.start or request.end:
+        transcript = filter_transcript(transcript, request.start, request.end)
     logger.debug('transcript for %s %s', url, transcript)
     logger.info('generating article text for %s', url)
     article = await _generate_article_text(
@@ -62,12 +64,20 @@ async def generate_article(
         (get_sec(topic.start), get_sec(topic.end)) for topic in article.topics
     ]
     logger.info('gathering frames for %s', url)
-    frames = await run_in_threadpool(extract_frames, url, screenshot_periods)
-    logger.info('encoding images for %s', url)
-    for topic, topic_frames in zip(article.topics, frames):
-        for frame in topic_frames:
-            encoded_frame = base64.b64encode(frame)
-            topic.images.append(encoded_frame.decode('utf-8'))
+    frames = await run_in_threadpool(
+        extract_frames,
+        url,
+        screenshot_periods,
+        request.number_of_screenshots,
+        request.selector,
+    )
+    logger.info('process images for %s using %s', url, request.image_format)
+    postprocessor = get_postrocessor(request.image_format)()
+    processed_images = await asyncio.gather(
+        *[postprocessor.process_many(topic_frames, session) for topic_frames in frames]
+    )
+    for topic, processed_topic_frames in zip(article.topics, processed_images):
+        topic.images = processed_topic_frames
     return article
 
 
@@ -123,40 +133,52 @@ async def _generate_article_text(
     number_of_paragraphs: int,
     session: ClientSession,
 ) -> Article:
-    number_of_seconds = transcript_entries[-1].start
+    number_of_seconds = transcript_entries[-1].start - transcript_entries[0].start
     approximate_topic_length = number_of_seconds / number_of_paragraphs
     subtitles = _format_transcript(transcript_entries)
     article_dict = await gpt_json_request(PROMPT, '\n'.join(subtitles), session)
     topics = [ArticleTopic(**topic_data) for topic_data in article_dict['topics']]
-    topics = _recombine_topics(approximate_topic_length, topics)
+    recombined_topics = _recombine_topics(approximate_topic_length, topics)
+    if number_of_paragraphs != len(recombined_topics):
+        logger.warning('Number of topics is not equal to the requested')
     transcript_entries_for_topics = [
-        _select_transcript_entries_for_topic(transcript_entries, topic) for topic in topics
+        _select_transcript_entries_for_topic(
+            transcript_entries, topic
+        ) for topic in recombined_topics
     ]
-    # TODO remove this hack, to do this, rewwite the first prompt
-    if (transcript_entries[-1] not in transcript_entries_for_topics[-1] and
-        transcript_entries_for_topics[-1]):
+    # TODO remove this hack, to do this, rewrite first prompt
+    if all((
+        transcript_entries[-1] not in transcript_entries_for_topics[-1],
+        transcript_entries_for_topics[-1],
+    )):
         transcript_entries_for_topics[-1].append(transcript_entries[-1])
 
-    logger.debug('Lenght of transacript: %d before splitting, %d after',
-                 len(transcript_entries),
-                 sum(len(entry) for entry in transcript_entries_for_topics))
+    logger.debug(
+        'Lenght of transcript: %d before splitting, %d after',
+        len(transcript_entries),
+        sum(len(entry) for entry in transcript_entries_for_topics)
+    )
 
     topic_datas = await asyncio.gather(*[
         gpt_request(
             TOPIC_PROMPT, '\n'.join(_format_transcript(transcript_entries)), session
         ) for transcript_entries in transcript_entries_for_topics if transcript_entries
     ])
-    for data, filtered_topics in zip(topic_datas, topics):
+    for data, filtered_topics in zip(topic_datas, recombined_topics):
         title, *paragraphs = data.splitlines()
-        filtered_topics.title = title
-        filtered_topics.paragraphs = '\n'.join(paragraphs)
-    filtered_topics = list(filter(lambda topic: topic.paragraphs, topics))
-    if len(filtered_topics) != len(topics):
+        if not paragraphs:
+            filtered_topics.title = 'Не удалось сгенерировать'
+            filtered_topics.paragraphs = title
+        else:
+            filtered_topics.title = title
+            filtered_topics.paragraphs = '\n'.join(paragraphs)
+    filtered_topics = list(filter(lambda topic: topic.paragraphs, recombined_topics))
+    if len(filtered_topics) != len(recombined_topics):
         logger.warning('Some topics has no paragraphs so was removed. This means that the model '
                        'gave the wrong answer, the quality of the article may suffer.')
 
     return Article(
         title=article_dict['title'],
         description=article_dict['description'],
-        topics=topics,
+        topics=recombined_topics,
     )

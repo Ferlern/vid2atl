@@ -1,23 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-import os
 import io
 import json
 
-from dotenv import load_dotenv
-
 from src.logger import get_logger
 from src.utils.json_ import try_loads
+from src.settings import PATH, TOKEN
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
-
-load_dotenv()
-
-TOKEN = os.getenv('API_TOKEN') or ''
-PATH = os.getenv('API_ENDPOINT') or ''
-if not TOKEN or not PATH:
-    raise RuntimeError('Invalid .env')
 
 
 logger = get_logger()

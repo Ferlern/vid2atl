@@ -1,17 +1,15 @@
 from __future__ import annotations
 import asyncio
 import base64
-import json
 from datetime import timedelta
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 from fastapi.concurrency import run_in_threadpool
-from pydantic.tools import parse_obj_as
 
-from src.schemas import Article, ArticleTopic, TranscriptEntry, PersonType, ArticleRequest
+from src.schemas import Article, ArticleTopic, TranscriptEntry, ArticleRequest
 from src.logger import get_logger
-from .gpt import gpt_request
-from .translation import translate_text
+from src.utils.time_ import get_sec
+from .gpt import gpt_json_request, gpt_request
 from .transcript import get_english_transcript
 from .screenshots import extract_frames
 
@@ -20,17 +18,29 @@ if TYPE_CHECKING:
 
 logger = get_logger()
 PROMPT = """
-Your task is to create an article from video subtitles.
+Choose a title and description for video subtitles and break subtitles into topics which should cover the entire subtitles.
+You will receive subtitles in the following format (start - video subtitles):
+hh:mm:ss - subtitles
+hh:mm:ss - subtitles
+...
+
+Respond with valid JSON in the following format (Substitude text in [square brackets]):
+{"title": "[title]", "description": "[summarize what was said in the subtitles]", "topics": [{"start": "[hh:mm:ss]", "end": "[hh:mm:ss]"}, ...]}
+"start" and "end" indicate the beginning and end of the discussion on this topic in video subtitles. Topics must cover all video subtitles and should last more than a minute."""  # noqa: E501
+
+TOPIC_PROMPT = """
+Your task is to combine video subtitles into whole sentences in first person without losing the meaning, combine multiple video subtitles into one sentence to achive this task. Each sentence should tell one thought. Also provide title for video subtitles. Answer in video subtitle language
 You will receive subtitles in the following format:
 hh:mm:ss - subtitles
 hh:mm:ss - subtitles
 ...
 
-Article must have title. The article should be divided into {number_of_subtopics} subtopics with headings.
-Try to make subtopics of the same size. If there are too many topics in the subtitles for the specified number of article subtopics, put several topics in one. For example "Arrays and Hash tables". If there are too few topics in subtitles, divide them into parts, for example "Arrays (intro)" and "Arrays (continued)"
-{aditional_prompt}
-Respond with valid JSON in the following format (Substitude text in [square brackets]):
-{{"title": "[title]", "topics": [{{"subtitle": "[subtitle]", "start": "[hh:mm:ss]", "end": "[hh:mm:ss]", "text": "[Describe in detail what was said in {person} person]"}}, ...]}}"""  # noqa: E501
+Respond in the following format (Substitude text in [square brackets]). Answer in video subtitle language:
+[title]
+[hh:mm:ss - hh:mm:ss] [generated sentences]
+[hh:mm:ss - hh:mm:ss] [generated sentences]
+...
+"""  # noqa: E501
 
 
 async def generate_article(
@@ -46,39 +56,19 @@ async def generate_article(
     article = await _generate_article_text(
         transcript,
         request.number_of_paragraphs,
-        person=request.person,
-        aditional_prompt=request.aditional_prompt,
         session=session,
     )
-    screenshot_seconds = []
-    for topic in article.topics:
-        mid_sec = (_get_sec(topic.start) + _get_sec(topic.end)) // 2
-        screenshot_seconds.append(int(mid_sec))
-    logger.info('gathering frames and translating to %s for %s', request.lang, url)
-    tasks = [run_in_threadpool(extract_frames, url, screenshot_seconds)]
-    if request.lang != 'en':
-        tasks.append(translate_article(article, session=session, lang=request.lang))  # type: ignore
-    frames, *_ = await asyncio.gather(*tasks)
+    screenshot_periods = [
+        (get_sec(topic.start), get_sec(topic.end)) for topic in article.topics
+    ]
+    logger.info('gathering frames for %s', url)
+    frames = await run_in_threadpool(extract_frames, url, screenshot_periods)
     logger.info('encoding images for %s', url)
-    for topic, frame in zip(article.topics, frames):
-        encoded_frame = base64.b64encode(frame)
-        topic.image = encoded_frame.decode('utf-8')
+    for topic, topic_frames in zip(article.topics, frames):
+        for frame in topic_frames:
+            encoded_frame = base64.b64encode(frame)
+            topic.images.append(encoded_frame.decode('utf-8'))
     return article
-
-
-async def translate_article(
-    article: Article,
-    lang: str,
-    session: ClientSession,
-) -> None:
-    article.title, *_ = await asyncio.gather(
-        translate_text(article.title, src='en', dest=lang, session=session),
-        *[_translate_article_topic(
-            topic,
-            lang=lang,
-            session=session
-        ) for topic in article.topics]
-    )
 
 
 def _format_transcript(transcript_entries: Iterable[TranscriptEntry]) -> list[str]:
@@ -90,35 +80,83 @@ def _format_transcript(transcript_entries: Iterable[TranscriptEntry]) -> list[st
     return result
 
 
+def _recombine_topics(
+    approximate_topic_length: float,
+    old_topics: list[ArticleTopic]
+) -> list[ArticleTopic]:
+    last_topic_end = get_sec(old_topics[-1].end)
+    topics = []
+    topic_start_time = old_topics[0].start
+    topic_start_second = get_sec(topic_start_time)
+    for old_topic in old_topics:
+        end_time = get_sec(old_topic.end)
+        if (
+            end_time - topic_start_second > approximate_topic_length and
+            last_topic_end - topic_start_second > approximate_topic_length
+        ):
+            topics.append(ArticleTopic(
+                start=topic_start_time,
+                end=old_topic.end,
+            ))
+            topic_start_time = old_topic.end
+            topic_start_second = end_time
+    if end_time != topic_start_time:  # type: ignore
+        topics.append(ArticleTopic(
+            start=topic_start_time,
+            end=old_topic.end,  # type: ignore
+        ))
+
+    return topics
+
+
+def _select_transcript_entries_for_topic(
+    transcript_entries: Sequence[TranscriptEntry],
+    topic: ArticleTopic,
+) -> list[TranscriptEntry]:
+    start = get_sec(topic.start)
+    end = get_sec(topic.end)
+    return [entry for entry in transcript_entries if start <= entry.start <= end]
+
+
 async def _generate_article_text(
-    transcript_entries: Iterable[TranscriptEntry],
+    transcript_entries: Sequence[TranscriptEntry],
     number_of_paragraphs: int,
-    person: PersonType,
-    aditional_prompt: str,
     session: ClientSession,
 ) -> Article:
+    number_of_seconds = transcript_entries[-1].start
+    approximate_topic_length = number_of_seconds / number_of_paragraphs
     subtitles = _format_transcript(transcript_entries)
-    prompt = PROMPT.format(
-        number_of_subtopics=number_of_paragraphs,
-        aditional_prompt=aditional_prompt,
-        person=person.value,
+    article_dict = await gpt_json_request(PROMPT, '\n'.join(subtitles), session)
+    topics = [ArticleTopic(**topic_data) for topic_data in article_dict['topics']]
+    topics = _recombine_topics(approximate_topic_length, topics)
+    transcript_entries_for_topics = [
+        _select_transcript_entries_for_topic(transcript_entries, topic) for topic in topics
+    ]
+    # TODO remove this hack, to do this, rewwite the first prompt
+    if (transcript_entries[-1] not in transcript_entries_for_topics[-1] and
+        transcript_entries_for_topics[-1]):
+        transcript_entries_for_topics[-1].append(transcript_entries[-1])
+
+    logger.debug('Lenght of transacript: %d before splitting, %d after',
+                 len(transcript_entries),
+                 sum(len(entry) for entry in transcript_entries_for_topics))
+
+    topic_datas = await asyncio.gather(*[
+        gpt_request(
+            TOPIC_PROMPT, '\n'.join(_format_transcript(transcript_entries)), session
+        ) for transcript_entries in transcript_entries_for_topics if transcript_entries
+    ])
+    for data, filtered_topics in zip(topic_datas, topics):
+        title, *paragraphs = data.splitlines()
+        filtered_topics.title = title
+        filtered_topics.paragraphs = '\n'.join(paragraphs)
+    filtered_topics = list(filter(lambda topic: topic.paragraphs, topics))
+    if len(filtered_topics) != len(topics):
+        logger.warning('Some topics has no paragraphs so was removed. This means that the model '
+                       'gave the wrong answer, the quality of the article may suffer.')
+
+    return Article(
+        title=article_dict['title'],
+        description=article_dict['description'],
+        topics=topics,
     )
-    resp = await gpt_request(prompt, '\n'.join(subtitles), session)
-    article_dict = json.loads(resp)
-    return parse_obj_as(Article, article_dict)
-
-
-async def _translate_article_topic(
-    topic: ArticleTopic,
-    lang: str,
-    session: ClientSession,
-) -> None:
-    topic.subtitle, topic.text = await asyncio.gather(
-        translate_text(topic.subtitle, src='en', dest=lang, session=session),
-        translate_text(topic.text, src='en', dest=lang, session=session),
-    )
-
-
-def _get_sec(time_str: str) -> int:
-    h, m, s = time_str.split(':')
-    return int(h) * 3600 + int(m) * 60 + int(s)

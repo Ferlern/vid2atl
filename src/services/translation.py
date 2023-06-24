@@ -217,7 +217,7 @@ async def translate_list(
     for chunk in translate_results:
         for original, translated in zip(
             chunk.original.split(CHUNK_DELIMITER),
-            chunk.translated.split(CHUNK_DELIMITER)
+            chunk.translated.replace('( *)', CHUNK_DELIMITER).split(CHUNK_DELIMITER)
         ):
             result.append(TranslateResult(
                 original=original,

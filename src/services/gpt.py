@@ -7,6 +7,7 @@ import json
 from dotenv import load_dotenv
 
 from src.logger import get_logger
+from src.utils.json_ import try_loads
 
 if TYPE_CHECKING:
     from aiohttp import ClientSession
@@ -38,11 +39,7 @@ async def gpt_request(
                 "content": user,
             },
         ],
-        # "model": "gpt-4",
-        # "model": "claude-instant-100k",
-        # "model": "gpt-3.5-turbo",
         "model": "gpt-3.5-turbo-16k",
-        # "model": "gpt-4",
         "temperature": 1,
         "presence_penalty": 0,
         "top_p": 1,
@@ -70,3 +67,12 @@ async def gpt_request(
     content = buffer.getvalue()
     logger.debug('Model response: %s', content)
     return content
+
+
+async def gpt_json_request(
+    system: str,
+    user: str,
+    session: ClientSession,
+):
+    content = await gpt_request(system=system, user=user, session=session)
+    return try_loads(content)

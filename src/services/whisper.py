@@ -29,7 +29,7 @@ def _get_audio_buffer(url: str) -> io.BytesIO:
 
 async def _whisper_request(session: ClientSession, buffer: bytes):
     async with session.post(
-        'http://whisper:9000/asr?task=translate&encode=true&output=json',
+        'http://whisper:9000/asr?encode=true&output=json',
         data={'audio_file': buffer},
     ) as response:
         resp = await response.text()

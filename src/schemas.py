@@ -6,7 +6,7 @@ from pydantic.dataclasses import dataclass
 
 
 _YOUTUBE_REGEX = r'^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*'
-_TIME_REGEX = r'^\d{1,2}:\d\d:\d\d$'
+_TIME_REGEX = r'^\d{1,2}:\d{1,2}:\d{1,2}$'
 
 
 @dataclass
@@ -22,22 +22,20 @@ class PersonType(Enum):
 
 
 class ArticleRequest(BaseModel):
-    number_of_paragraphs: int
+    number_of_paragraphs: int = 0
     url: str = Field(regex=_YOUTUBE_REGEX)
-    person: PersonType = PersonType.FIRST
-    aditional_prompt: str = ''
-    lang: str = 'en'
     force_whisper: bool = False
 
 
 class ArticleTopic(BaseModel):
-    subtitle: str
     start: str = Field(regex=_TIME_REGEX)
     end: str = Field(regex=_TIME_REGEX)
-    text: str
-    image: Optional[str] = None
+    title: Optional[str] = None
+    paragraphs: Optional[str] = None
+    images: list[str] = []
 
 
 class Article(BaseModel):
     title: str
+    description: str
     topics: list[ArticleTopic]

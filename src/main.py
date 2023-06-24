@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from logging.config import dictConfig
 
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from aiohttp import ClientSession
 
 from .schemas import ArticleRequest
@@ -22,6 +23,14 @@ async def _lifespan(_: FastAPI):
     await http_client.stop()
 
 app = FastAPI(lifespan=_lifespan)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.post("/article/")

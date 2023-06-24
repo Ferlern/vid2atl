@@ -23,6 +23,8 @@ class PostrocessorType(str, Enum):
 
 class SelectorType(str, Enum):
     UNIFORM = 'uniform'
+    SIMILARITY = 'similarity'
+    CIRCLE_RECTANGLE = 'circle_rectangle'
 
 
 class ArticleRequest(BaseModel):

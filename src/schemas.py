@@ -44,7 +44,16 @@ class ArticleTopic(BaseModel):
     images: list[str] = []
 
 
+class GenerationTime(BaseModel):
+    total: float = 0
+    images: float = 0
+    title: float = 0
+    transcript: float = 0
+    content: float = 0
+
+
 class Article(BaseModel):
     title: str
     description: str
     topics: list[ArticleTopic]
+    generation_time: GenerationTime

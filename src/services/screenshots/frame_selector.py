@@ -182,7 +182,6 @@ def extract_frames(
                 break
 
         result = selector.get_result()
-        logger.debug('selecor select %d images')
         for frame in result:
             _, buffer = cv2.imencode('.png', frame)
             period_screenshots.append(buffer.tobytes())

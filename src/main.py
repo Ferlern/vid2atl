@@ -7,7 +7,7 @@ from aiohttp import ClientSession
 
 from .schemas import ArticleRequest
 from .dependencies import http_client
-from .services.article import generate_article
+from .services.article import ArticleGenerator
 from .logger import LogConfig
 from .utils.pytube_hotfix import fix
 
@@ -38,5 +38,6 @@ async def create_article(
     article_request: ArticleRequest,
     session: ClientSession = Depends(http_client),
 ):
-    article = await generate_article(article_request, session)
+    generator = ArticleGenerator(request=article_request, session=session)
+    article = await generator.generate_article()
     return article.dict()

@@ -19,6 +19,11 @@ async def gpt_request(
     user: str,
     session: ClientSession,
 ) -> str:
+    """
+    Далает запрос на указанный в .env url и возвращает полный ответ
+    Использованные параменты не обязательно оптимальные, перед массовым использованием лучше
+    подобрать temperature и top_p исходя из качества ответов
+    """
     payload = {
         "messages": [
             {
@@ -31,7 +36,7 @@ async def gpt_request(
             },
         ],
         "model": "gpt-3.5-turbo-16k",
-        "temperature": 1,
+        "temperature": 0.5,
         "presence_penalty": 0,
         "top_p": 1,
         "frequency_penalty": 0,
@@ -65,5 +70,6 @@ async def gpt_json_request(
     user: str,
     session: ClientSession,
 ):
+    """Получает JSON из ответа GPT"""
     content = await gpt_request(system=system, user=user, session=session)
     return try_loads(content)

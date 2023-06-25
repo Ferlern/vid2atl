@@ -11,6 +11,7 @@ _TIME_REGEX = r'^\d{1,2}:\d{1,2}:\d{1,2}$'
 
 @dataclass
 class TranscriptEntry:
+    """Фрагмент расшифровки"""
     text: str
     start: float
     duration: float
@@ -28,6 +29,7 @@ class SelectorType(str, Enum):
 
 
 class ArticleRequest(BaseModel):
+    """Схема запроса статьи, используется для генерации эндпоинта и классом генерации"""
     number_of_paragraphs: int = Field(ge=2, default=3)
     number_of_screenshots: int = Field(ge=1, default=3)
     url: str = Field(regex=_YOUTUBE_REGEX)
@@ -39,6 +41,7 @@ class ArticleRequest(BaseModel):
 
 
 class ArticleTopic(BaseModel):
+    """Одна из тем статьи. Статья может иметь произвольное количество тем"""
     start: str = Field(regex=_TIME_REGEX)
     end: str = Field(regex=_TIME_REGEX)
     title: Optional[str] = None
@@ -47,6 +50,7 @@ class ArticleTopic(BaseModel):
 
 
 class GenerationTime(BaseModel):
+    """Время генерации каждой части статьи"""
     total: float = 0
     images: float = 0
     title: float = 0
@@ -55,6 +59,7 @@ class GenerationTime(BaseModel):
 
 
 class Article(BaseModel):
+    """Сгенерированная статья"""
     title: str
     description: str
     topics: list[ArticleTopic]

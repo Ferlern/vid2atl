@@ -63,8 +63,6 @@ class UniformSelector(FrameSelector):
             second in self._to_save,
             second not in self._saved
         )):
-            # TODO remove
-            logger.debug('save frame at second %d', second)
             self._saved[second] = frame
 
     def get_result(self) -> list[cv2.Mat]:
@@ -93,8 +91,6 @@ class SimilaritySelector(FrameSelector):
         if self._candidates and second - self._last_second <= 5:
             return
 
-        # TODO remove
-        logger.debug('calculate hist for frame at second %d', second)
         hist = cv2.calcHist([frame], [0], None, [256], [0, 256])
         self._candidates.append((frame, hist))
         self._last_second = second

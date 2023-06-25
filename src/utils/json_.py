@@ -3,6 +3,11 @@ import contextlib
 
 
 def try_loads(json_string: str):
+    """
+    Пытается исправить частые ошибки в JSON ответе от нейросети.
+    Это проблемная часть проекта, правильный JSON обязателен.
+    Перед массовым использованием это нужно как-то исправить или избежать необходимости json ответа
+    """
     with contextlib.suppress(json.JSONDecodeError):
         return json.loads(json_string)
     json_string = (

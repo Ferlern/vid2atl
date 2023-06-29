@@ -50,7 +50,7 @@ async def gpt_request(
     buffer = io.StringIO()
     async with session.post(PATH, headers=headers, json=payload) as response:
         async for event in response.content:
-            if event == b'\n' or not event:
+            if event == b'\n' or not event or event == b'data: [DONE]\n':
                 continue
             try:
                 resp_dict = json.loads(event.lstrip(b'data:').rstrip(b'\n'))
